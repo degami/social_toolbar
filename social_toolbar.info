@@ -1,0 +1,5 @@
+name = Social Toolbar
+description = "Social Toolbar"
+core = 7.x
+
+dependencies[] = jquery_ui

@@ -1,0 +1,176 @@
+.social_toolbar .clear{
+	clear:both;
+	float: none;
+	height: 1px;
+	margin: 0;padding: 0;
+	width: 100%;
+	height: 1px;
+	visibility: hidden;
+}
+.social_toolbar{position:fixed;z-index: 10000;}
+.social_toolbar.position_top{
+	top:0;
+	left: 50%;
+}
+.social_toolbar.position_right{
+	top:50%;
+	/*right: 0;*/
+	right: -2px;
+}
+.social_toolbar.position_bottom{
+	left:50%;
+	bottom: 0;
+}
+.social_toolbar.position_left{
+	top:50%;
+	/*left: 0;*/
+	left: -2px;
+}
+
+.social_toolbar .toolbar_item{
+	clear: both;
+	height: 62px;
+	width: 44px;
+}
+
+.social_toolbar .toolbar_item,
+.social_toolbar .toolbar_item.open{
+	position: relative;
+}
+
+.social_toolbar.position_left .toolbar_item,
+.social_toolbar.position_left .toolbar_item.open{
+	left: 0;
+	float: left;
+	margin-bottom: 10px;
+}
+.social_toolbar.position_right .toolbar_item,
+.social_toolbar.position_right .toolbar_item.open{
+	right: 0;
+	float: right;
+	margin-bottom: 10px;
+}
+
+.social_toolbar.position_top .toolbar_item,
+.social_toolbar.position_top .toolbar_item.open{
+	top: 0;
+	margin-right: 10px;
+}
+
+.social_toolbar.position_bottom .toolbar_item,
+.social_toolbar.position_bottom .toolbar_item.open{
+	bottom: 0;
+	margin-right: 10px;
+}
+
+
+.social_toolbar .icon,
+.social_toolbar .panel{
+	background-color: #166F87;
+	border: solid 2px #166F87;
+	/*border: solid 2px #C8C8C8;*/
+	
+	/*border: solid 0px #166F87 !important;*/
+	/*box-shadow: -5px 2px 4px rgba(0, 0, 0, 0.5) !important;*/
+	
+	position: absolute;
+}
+
+.social_toolbar.position_left .icon{top: 0;right: 0;z-index:1;border-left: 0;float: right;}
+.social_toolbar.position_left .panel{top: 0;right: 40px;z-index:0;border-left: 0;}
+
+.social_toolbar.position_right .icon{left: 0;top: 0;z-index:1;border-right: 0;float: left;}
+.social_toolbar.position_right .panel{left: 40px;top: 0;z-index:0;border-right: 0;}
+
+.social_toolbar.position_top .icon{bottom: 0;left: 0;z-index:1;border-top: 0;float: left;}
+.social_toolbar.position_top .panel{bottom: 40px;left: 0;z-index:0;border-top: 0;}
+
+.social_toolbar.position_bottom .icon{top: 0;left: 0;z-index:1;border-bottom: 0;float: left;}
+.social_toolbar.position_bottom .panel{top: 40px;left: 0;z-index:0;border-bottom: 0;}
+
+.social_toolbar.position_left .panel,
+.social_toolbar.position_right .panel{
+	height: 100%;width: 100%;
+}
+
+.social_toolbar.position_top .panel,
+.social_toolbar.position_bottom .panel{
+	width: 100%;width: 100%;
+}
+
+.social_toolbar.position_left .icon,
+.social_toolbar.position_right .icon{
+	height: 60px;
+	width: 40px;
+	position:relative;
+	display: block;
+	margin-bottom: 10px;
+}
+
+.social_toolbar .toolbar_item .panel{
+	display: none;
+	overflow: auto;
+}
+.social_toolbar .toolbar_item.open .panel{
+	display: block;
+}
+.social_toolbar.position_left .panel,
+.social_toolbar.position_right .panel{
+	padding: 15px 10px 15px 10px;
+}
+.social_toolbar.position_top .panel,
+.social_toolbar.position_bottom .panel{
+	padding: 10px 15px 10px 15px;
+}
+
+.social_toolbar.position_left .icon img,
+.social_toolbar.position_right .icon img{
+	position: absolute;
+	top: 50%;
+	left: 50%;
+	margin-top: -30px;
+	margin-left: -20px;
+}
+
+.social_toolbar.position_bottom .icon,
+.social_toolbar.position_top .icon{
+	height: 40px;
+	width: 60px;
+	position:relative;
+	display: block;
+	margin-right: 10px;
+	float: left;
+}
+
+.social_toolbar.position_bottom .icon img,
+.social_toolbar.position_top .icon img{
+	position: absolute;
+	top: 50%;
+	left: 50%;
+	margin-top: -20px;
+	margin-left: -30px;
+}
+
+/*.social_toolbar.position_bottom .toolbar_item_open,
+.social_toolbar.position_top .toolbar_item_open{
+	width: 542px;
+	height: 310px;	
+}
+.social_toolbar.position_right .toolbar_item_open,
+.social_toolbar.position_left .toolbar_item_open{
+	width: 354px;
+	height: 498px;
+}*/
+
+.social_toolbar.position_bottom .toolbar_item.open .icon{
+	margin-bottom: -2px;
+}
+.social_toolbar.position_top .toolbar_item.open .icon{
+	margin-top: -2px;
+}
+.social_toolbar.position_right .toolbar_item.open .icon{
+	margin-right: -2px;
+}
+.social_toolbar.position_left .toolbar_item.open .icon{
+	margin-left: -2px;
+}

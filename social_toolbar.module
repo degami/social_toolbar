@@ -1,0 +1,762 @@
+<?php
+
+define('POSITION_TOP',0);
+define('POSITION_LEFT',1);
+define('POSITION_BOTTOM',2);
+define('POSITION_RIGHT',3);
+
+function social_toolbar_menu(){
+	$items=array();
+	
+	$items['admin/config/social_toolbar'] = array(
+		'title' => t('Social Toolbar Settings'),
+		'description' => t('Social Toolbar Settings'),
+		'page callback' => 'drupal_get_form',
+		'page arguments' => array('social_toolbar_form_admin'),
+		'access arguments' => array('administer social_toolbar'),
+	);
+	
+	return $items;
+}
+
+function social_toolbar_permission() {
+	return array(
+	    'administer social_toolbar' =>  array(
+	      'title' => t('Administer Social Toolbar'),
+	      'description' => t('Perform administration tasks for Social Toolbar.'),
+		),
+	);
+}
+
+function social_toolbar_form_admin($form,&$form_state){
+
+	$social_toolbar_config=variable_get('social_toolbar_config',null);
+	$num_elems = !empty($form_state['rebuild']) ? $form_state['values']['social_toolbar_numelems']+1 : ((!is_array($social_toolbar_config) || count($social_toolbar_config)==0) ? 1:count($social_toolbar_config)) ;
+
+	if(!is_array($social_toolbar_config) || count($social_toolbar_config)==0) {
+		$social_toolbar_config=array();
+	}
+	for($i=0;$i<$num_elems;$i++){
+		if(isset($social_toolbar_config[$i])) continue;
+		$social_toolbar_config[]=array('logo'=>null,'class'=>null,'type'=>null,'markup'=>null);
+	}
+
+	$form['social_toolbar_enabled']=array(
+		'#type'=>'checkbox',
+		'#title'=>t('Enable Social Toolbar'),
+		'#default_value'=>variable_get('social_toolbar_enabled', false),
+	);
+
+	$form['social_toolbar_elements_fieldset'] = array(
+		// The prefix/suffix provide the div that we're replacing, named by
+		// #ajax['wrapper'] below.
+		'#type' => 'container',
+		'#id'=>'social_toolbar-uploads-div',
+	);
+
+	$max_upload = (int)(ini_get('upload_max_filesize'));
+	$max_post = (int)(ini_get('post_max_size'));
+	$memory_limit = (int)(ini_get('memory_limit'));
+	$upload_mb = min($max_upload, $max_post, $memory_limit);
+
+	$extensions=explode(' ','jpg jpeg png');
+	foreach($extensions as &$ext) $ext='.'.trim($ext);
+
+	foreach($social_toolbar_config as &$elem){
+		if(is_numeric($elem['logo']) && $elem['logo']>0) $elem['logo']=file_load($elem['logo']);
+	}
+
+	$elem_types=array(
+			'html'=>t('Markup'),
+			'fb'=>t('Facebook'),
+			'twitter'=>t('Twitter'),
+			'youtube'=>t('YouTube'),
+			'slideshare'=>t('Slideshare'),
+		);
+	
+	$form['social_toolbar_numelems']=array('#type'=>'hidden','#value'=>count($social_toolbar_config));
+	for($i=0;$i<$num_elems;$i++){
+		$element= isset($social_toolbar_config[$i])?$social_toolbar_config[$i]:array('logo'=>null,'class'=>null,'type'=>null,'markup'=>null);
+		$form['social_toolbar_elements_fieldset']['social_toolbar_elem'.$i]=array('#type'=>'fieldset','#collapsible'=>true,'#collapsed'=>true,'#title'=> t('Element').' '.(!empty($social_toolbar_config[$i]['type'])?$elem_types[$social_toolbar_config[$i]['type']]:''));
+		$form['social_toolbar_elements_fieldset']['social_toolbar_elem'.$i]['social_toolbar_elem'.$i.'_logo'] = array(
+			'#type'=>'managed_file',
+			'#title'=>t('Logo image'),
+			'#upload_validators' => array(
+				'file_validate_extensions' => array('jpg jpeg png'),
+				// Pass the maximum file size in bytes
+				'file_validate_size' => array($upload_mb * 1024 * 1024),
+			),
+			'#upload_location'=>'public://social_toolbar/',
+			'#description'=>t('extensions allowed: !extension_list , max file size: !maxfilesize MB',Array('!extension_list'=>implode(' ',$extensions),'!maxfilesize'=>$upload_mb)),
+			'#default_value'=>isset($element['logo']->fid)?$element['logo']->fid:null,
+			'#process' => array('social_toolbar_my_file_element_process'),
+		);
+		$form['social_toolbar_elements_fieldset']['social_toolbar_elem'.$i]['social_toolbar_elem'.$i]['social_toolbar_elem'.$i.'_class'] = array(
+			'#type'=>'textfield',
+			'#title'=>t('Class'),
+			'#description'=>t('classes to add to element'),
+			'#default_value'=>$element['class'],
+		);
+		$form['social_toolbar_elements_fieldset']['social_toolbar_elem'.$i]['social_toolbar_elem'.$i.'_type'] = array(
+			'#type'=>'select',
+			'#options'=>$elem_types,
+			'#title'=>t('Type of element'),
+			'#description'=>t('element type'),
+			'#default_value'=>$element['type'],
+		);
+		$form['social_toolbar_elements_fieldset']['social_toolbar_elem'.$i]['social_toolbar_elem'.$i.'_markup'] = array(
+			'#type'=>'textarea',
+			'#title'=>t('Markup'),
+			'#description'=>t('element markup'),
+			'#default_value'=>$element['markup'],
+		);
+		$form['social_toolbar_elements_fieldset']['social_toolbar_elem'.$i]['social_toolbar_elem'.$i.'_delete'] = array(
+			'#type'=>'checkbox',
+			'#title'=>t('mark for deletion'),
+			'#default_value'=>false,
+		);	
+	}
+	
+	$form['add-new-elem']=array(
+			'#type'=>'button',
+			'#value'=>t('Add more'),
+			'#ajax' => array(
+					'callback' => 'social_toolbar_addmore_elements_callback',
+					'wrapper' => 'social_toolbar-uploads-div',
+					//'method' defaults to replaceWith, but valid values also include
+					// append, prepend, before and after.
+					// 'method' => 'replaceWith',
+					'method' => 'append',
+					// 'effect' defaults to none. Other valid values are 'fade' and 'slide'.
+					'effect' => 'fade',
+					// 'speed' defaults to 'slow'. You can also use 'fast'
+					// or a number of milliseconds for the animation to last.
+					// 'speed' => 'slow',
+					// Don't show any throbber...
+					'progress' => array('type' => 'none'),
+			),
+	);	
+	
+	$form['social_toolbar_position']=array(
+		'#type'=>'select',
+		'#title'=>t('Social Toolbar Position Edge'),
+		'#options'=>array(
+			POSITION_TOP=>t('Top Edge'),
+			POSITION_LEFT=>t('Left Edge'),
+			POSITION_BOTTOM=>t('Bottom Edge'),
+			POSITION_RIGHT=>t('Right Edge'),
+		),
+		'#default_value'=>variable_get('social_toolbar_position',POSITION_RIGHT),
+	);
+	$form['social_toolbar_open_panel_w']=array(
+		'#type'=>'textfield',
+		'#title'=>t('Social Toolbar Open Panel Width'),
+		'#default_value'=>variable_get('social_toolbar_open_panel_w',354),
+	);
+	$form['social_toolbar_open_panel_h']=array(
+		'#type'=>'textfield',
+		'#title'=>t('Social Toolbar Open Panel Height'),
+		'#default_value'=>variable_get('social_toolbar_open_panel_h',498),
+	);
+	$form['#validate'][]='social_toolbar_form_admin_validate';
+	
+	return system_settings_form($form);
+}
+
+
+function social_toolbar_my_file_element_process($element, &$form_state, $form) {
+  $element = file_managed_file_process($element, $form_state, $form);
+  $element['upload_button']['#access'] = FALSE;
+  $element['remove_button']['#access'] = FALSE;
+  return $element;
+}
+
+function social_toolbar_addmore_elements_callback($form, $form_state) {
+  return $form['social_toolbar_elements_fieldset']['social_toolbar_elem'.($form['social_toolbar_numelems']['#value']-1)];
+}
+
+function social_toolbar_form_admin_validate($form,&$form_state){
+	//var_dump($form_state);die();
+	
+	if($form_state['submitted']=='true'){
+		//var_dump($form_state['values']);die();
+		$elemstodelete=array();
+		variable_del('social_toolbar_config');
+		$social_toolbar_config=array();
+		
+		$config_keys=array();
+		foreach($form_state['values'] as $k=>$value){
+			if(preg_match('/^social_toolbar_elem([0-9]+)_(.*?)$/i',$k,$matches)){
+				$index=$matches[1];
+				if(!is_numeric($index)) continue;
+				if(trim($matches[2])=='') continue;
+				
+				if($matches[2]=='logo' && !empty($value)){
+					if(is_numeric($value) && $value>0){
+						if( ($file=file_load($value)) !==false && $file->status!=FILE_STATUS_PERMANENT ){
+							$file->status=FILE_STATUS_PERMANENT;
+							file_usage_add($file,'social_toolbar','config',$index);
+							file_save($file);
+						}
+					}
+				}
+				
+				if($matches[2]=='delete' && !empty($value)){
+					$elemstodelete[]=$index;
+				}else{
+					$social_toolbar_config[$index][$matches[2]]=$value;
+				}
+				$config_keys[]=$k;
+			}
+		}
+		
+		foreach($elemstodelete as $index) unset($social_toolbar_config[$index]);
+		foreach($config_keys as $index) unset($form_state['values'][$index]);
+		
+		if(count($social_toolbar_config)>0){
+			$newconfig=array();
+			foreach($social_toolbar_config as $elem) {
+				if(empty($elem['logo']) && empty($elem['markup']) && empty($elem['class'])) continue;
+				$newconfig[]=$elem;
+			}
+			variable_set('social_toolbar_config',$newconfig);
+			$form_state['values']['social_toolbar_numelems']=count($newconfig);
+		}
+	}
+}
+
+function social_toolbar_preprocess_html(&$variables){
+	if(arg(0)=='admin') return;
+	if(variable_get('social_toolbar_enabled', false)!=true) return;
+	$out=_social_toolbar_get_markup();
+
+	foreach(module_implements('alter_social_toolbar') as $module){
+		$out = module_invoke($module, 'alter_social_toolbar',$out);
+	}
+
+	if(!isset($out['#markup']) || trim($out['#markup'])=='') return;
+
+	if(isset($out['#js'])){
+		foreach($out['#js'] as $js_elem){
+			drupal_add_js($js_elem['file'],array('type'=>$js_elem['type']));
+		}
+	}
+	if(isset($out['#css']))	{
+		foreach($out['#css'] as $css_elem){
+			drupal_add_css($css_elem['file'],array('type'=>$css_elem['type']));
+		}
+	}
+
+	$variables['page']['page_top']['social_toolbar'] = $out;
+/*	
+.social_toolbar.position_bottom .icon,
+.social_toolbar.position_top .icon{
+	height: 40px;
+	width: 60px;
+}
+.social_toolbar.position_left .icon,
+.social_toolbar.position_right .icon{
+	height: 60px;
+	width: 40px;
+}
+
+	
+.social_toolbar.position_bottom .toolbar_item_open,
+.social_toolbar.position_top .toolbar_item_open{
+	width: 542px;
+	height: 310px;	
+}
+.social_toolbar.position_right .toolbar_item_open,
+.social_toolbar.position_left .toolbar_item_open{
+	width: 354px;
+	height: 498px;
+}
+variable_get('social_toolbar_openpanel_w',500)
+variable_get('social_toolbar_openpanel_h',300)
+*/
+	$position=variable_get('social_toolbar_position',POSITION_RIGHT);
+	$openpanel_w=0;
+	$openpanel_h=0;
+	switch($position){
+		case POSITION_TOP:
+			$closedpanel_h=42;
+			$closedpanel_w=64;
+			$openpanel_h=variable_get('social_toolbar_open_panel_h',354);
+			$openpanel_w=variable_get('social_toolbar_open_panel_w',498);
+			break;
+		case POSITION_LEFT:
+			$closedpanel_h=62;
+			$closedpanel_w=44;
+			$openpanel_h=variable_get('social_toolbar_open_panel_h',498);
+			$openpanel_w=variable_get('social_toolbar_open_panel_w',354);
+			break;
+		case POSITION_BOTTOM:
+			$closedpanel_h=42;
+			$closedpanel_w=64;
+			$openpanel_h=variable_get('social_toolbar_open_panel_h',354);
+			$openpanel_w=variable_get('social_toolbar_open_panel_w',498);
+			break;
+		case POSITION_RIGHT:
+			$closedpanel_h=62;
+			$closedpanel_w=44;
+			$openpanel_h=variable_get('social_toolbar_open_panel_h',498);
+			$openpanel_w=variable_get('social_toolbar_open_panel_w',354);
+			break;
+	}
+
+	drupal_add_js(
+		array('social_toolbar'=>array(
+			'openpanel_w'=>$openpanel_w,
+			'openpanel_h'=>$openpanel_h,
+			'closedpanel_w'=>$closedpanel_w,
+			'closedpanel_h'=>$closedpanel_h,
+			'position'=>$position,
+			)
+		),'setting');
+}
+
+/* Make a complete deep copy of an array replacing
+references with deep copies until a certain depth is reached
+($maxdepth) whereupon references are copied as-is...  */
+function array_deep_copy (&$array, &$copy, $maxdepth=50, $depth=0) {
+    if($depth > $maxdepth) { $copy = $array; return; }
+    if(!is_array($copy)) $copy = array();
+    foreach($array as $k => &$v) {
+        if(is_array($v)) {
+		array_deep_copy($v,$copy[$k],$maxdepth,++$depth);
+        } else {
+		$copy[$k] = $v;
+        }
+    }
+}
+
+function _social_toolbar_get_markup(){
+	jquery_ui_add(array('effects.core'));
+	$out=array();
+	
+	$out['#js']=array();
+	$out['#js'][]=array('file'=>drupal_get_path('module','social_toolbar').'/js/social_toolbar.js','type'=>'file');
+	
+	$out['#css']=array();
+	$out['#css'][]=array('file'=>drupal_get_path('module','social_toolbar').'/css/social_toolbar.css','type'=>'file');
+	
+	$out['#markup']='';
+	
+	$social_toolbar_config=variable_get('social_toolbar_config',null);
+	if($social_toolbar_config == null) return array();
+	
+	foreach($social_toolbar_config as $elem){
+		if(is_numeric($elem['logo']) && $elem['logo']>0) $elem['logo']=file_load($elem['logo']);
+	}
+	
+	$position=variable_get('social_toolbar_position',POSITION_RIGHT);
+	$position_classes=array(
+		POSITION_TOP=>'position_top',
+		POSITION_RIGHT=>'position_right',
+		POSITION_BOTTOM=>'position_bottom',
+		POSITION_LEFT=>'position_left',
+	);
+	
+	$numelems=0;
+	$out['#markup'].='<div class="social_toolbar '.$position_classes[$position].'">';
+	foreach($social_toolbar_config as $elem){
+		$out['#markup'].='<div class="toolbar_item '.$elem['class'].'">';
+		$out['#markup'].='<div class="icon">';
+		if(is_numeric($elem['logo']) && $elem['logo']>0){
+			$elem['logo']=file_load($elem['logo']);
+		}
+		if(is_object($elem['logo'])){
+			$out['#markup'].=_social_toolbar_get_logo_image($elem['logo']);
+		}
+		$out['#markup'].='</div><div class="panel">';
+		switch($elem['type']){
+			case 'html':
+				$out['#markup'].=$elem['markup'];$numelems++;
+			break;
+			case 'fb':
+				$out['#markup'].=_social_toolbar_fb_slide($elem['markup']);$numelems++;
+			break;
+			case 'twitter':
+				$out['#markup'].=_social_toolbar_twitter_slide($elem['markup']);$numelems++;
+			break;
+			case 'youtube':
+				$out['#markup'].=_social_toolbar_youtube_slide($elem['markup']);$numelems++;
+			break;
+			case 'slideshare':
+				$out['#markup'].=_social_toolbar_slideshare_slide($elem['markup']);$numelems++;
+			break;
+		}
+		$out['#markup'].='</div></div>';
+	}
+	
+	if($numelems>0){
+		$icon_size=64;
+		$icon_margin=10;
+		$widget_size=$numelems*($icon_size+$icon_margin);
+		$adjust_margin=round($widget_size/2);
+		switch($position){
+			case POSITION_TOP:
+			case POSITION_BOTTOM:
+			$out['#css'][]=array('file'=>'.social_toolbar{width: '.$widget_size.'px; margin-left: -'.$adjust_margin.'px;}','type'=>'inline');
+			break;
+			case POSITION_LEFT:
+			case POSITION_RIGHT:
+			$out['#css'][]=array('file'=>'.social_toolbar{height: '.$widget_size.'px; margin-top: -'.$adjust_margin.'px;}','type'=>'inline');
+			break;
+		}
+	}
+	
+	$out['#markup'].='<div class="clear"></div></div>';
+	return $out;
+}
+
+function _social_toolbar_get_logo_image($file){
+	$style_names=array_keys(image_styles());
+	if(!in_array('logo_toolbar',$style_names)){
+	 _social_toolbar_create_image_style();
+	}
+	
+	if(!isset($file->image_dimensions)){
+		$file->image_dimensions=image_get_info($file->uri);
+	}
+	//	'width'=>$file->image_dimensions['width'],
+	//	'height'=>$file->image_dimensions['height'],
+	$image_arr = array(
+		'style_name' => 'logo_toolbar',
+		'path' => $file->uri,
+		'width' => '',
+		'height' => '',
+		'alt' => '',
+		'title' => '',
+	);
+	return theme('image_style',$image_arr);
+}
+
+function _social_toolbar_create_image_style() {
+  $style = image_style_save(array('name' => 'logo_toolbar'));
+  $effect = array(
+    'name' => 'image_scale',
+    'data' => array(
+      'width' => 40,
+      'height' => 60,
+      'upscale' => false,
+    ),
+    'isid' => $style['isid'],
+  );
+  image_effect_save($effect);
+  return true;
+}
+
+function _social_toolbar_fb_slide($content){
+
+	drupal_add_css(drupal_get_path('module','social_toolbar').'/css/social_toolbar_fb_wall.css');
+
+	$out=array();
+	foreach(explode("\n",$content) as $line){
+		$line=trim($line);
+		if($line=='') continue;
+		$line=explode('][',ltrim(rtrim($line,']'),'['));
+
+		$app_id=$line[0];
+		$app_secret=$line[1];
+
+		$facebook_uid=null;
+		$access_token=null;
+
+		if(isset($line[2]))
+			$access_token=$line[2];
+		if(isset($line[3]))
+			$facebook_uid=$line[3];
+
+		if($access_token==null){
+			//non ho un access token, ne richiedo uno e lo faccio diventare subito uno con scadenza lunga
+			$code = $_REQUEST["code"];
+
+			if(empty($code)) {
+				// redirect a FB
+				$_SESSION['state'] = md5(uniqid(rand(), TRUE)); // CSRF protection
+				$dialog_url = "https://www.facebook.com/dialog/oauth?client_id=" 
+				. $app_id . "&redirect_uri=" . urlencode(url('<front>',array('absolute'=>true))) . "&state="
+				. $_SESSION['state'];
+
+				echo("<script>top.location.href='" . $dialog_url . "'</script>");
+			}
+			
+			if($_SESSION['state'] && ($_SESSION['state'] === $_REQUEST['state'])) {
+				$token_url = "https://graph.facebook.com/oauth/access_token?"
+				. "client_id=" . $app_id . "&redirect_uri=" . urlencode(url('<front>',array('absolute'=>true)))
+				. "&client_secret=" . $app_secret . "&code=" . $code.'&scope=user_status,user_likes,user_activities,read_stream';
+
+				$req_token = drupal_http_request($token_url);
+
+				$params = null;
+				parse_str($req_token->data, $params);
+
+				$access_token=$params['access_token'];
+				
+				$url='https://graph.facebook.com/oauth/access_token?grant_type=fb_exchange_token&client_id='.$app_id.'&client_secret='.$app_secret.'&fb_exchange_token='.$access_token;
+				$req_token=drupal_http_request($url);
+				$params = null;
+				parse_str($req_token->data, $params);
+				$access_token=$params['access_token'];
+				_social_toolbar_update_fb_info($app_id,$app_secret,$params['access_token']);
+				
+			} else {
+				echo("The state does not match. You may be a victim of CSRF.");
+			}
+		}else{
+		
+			//ho un access token, lo aggiorno
+		
+		//	$req_token=drupal_http_request('https://graph.facebook.com/oauth/access_token?client_id='.$app_id.'&client_secret='.$app_secret.'&grant_type=client_credentials');
+			$url='https://graph.facebook.com/oauth/access_token?grant_type=fb_exchange_token&client_id='.$app_id.'&client_secret='.$app_secret.'&fb_exchange_token='.$access_token;
+			$req_token=drupal_http_request($url);
+			$params = null;
+			parse_str($req_token->data, $params);
+
+			_social_toolbar_update_fb_info($app_id,$app_secret,array('old'=>$access_token,'new'=>$params['access_token']),$facebook_uid);
+			$access_token=$params['access_token'];
+		}
+
+		
+		if($facebook_uid==null){
+			$req_data=drupal_http_request('https://graph.facebook.com/me?access_token='.$access_token);
+			$elements=json_decode($req_data->data);
+			$facebook_uid = $elements->id;
+			_social_toolbar_update_fb_info($app_id,$app_secret,$access_token,$facebook_uid);
+		}else{
+			_social_toolbar_update_fb_info($app_id,$app_secret,$access_token,$facebook_uid);
+		}
+		
+		$req_data=drupal_http_request('https://graph.facebook.com/'.$facebook_uid.'?fields=id,name,statuses.limit(10).fields(message),posts.fields(message,caption,description,created_time,name,picture),likes&access_token='.$access_token);
+		$elements=json_decode($req_data->data);
+		foreach( $elements->posts->data as $elem){
+		
+			if( !isset($elem->name) && !isset($elem->message) && !isset($elem->description) && !isset($elem->caption) && !isset($elem->picture) ) continue;
+		
+			$out[$elements->id][strtotime($elem->created_time)]='<div class="fb-wall-box">
+			'.((isset($elem->created_time))?'<div class="fb-wall-date">'.format_date( strtotime($elem->created_time) , 'custom' , 'j F Y H:i') .'</div>':'').'
+			'.((isset($elem->picture))?'<img class="fb-wall-picture" src="'.$elem->picture.'" />':'').'
+			<div class="text">
+			'.((isset($elem->name))?'<div class="fb-wall-name">'.$elem->name.'</div>':'').'
+			'.((isset($elem->caption))?'<div class="fb-wall-caption">'.$elem->caption.'</div>':'').'
+			'.((isset($elem->message))?'<div class="fb-wall-message">'.$elem->message.'</div>':'').'
+			'.((isset($elem->description))?'<div class="fb-wall-description">'.$elem->description.'</div>':'').'
+			</div>			
+			</div>';
+		
+		}
+		foreach($elements->likes->data as $elem){
+		
+			if(!isset($elem->category) || !isset($elem->name)) continue;
+
+			$out[$elements->id][strtotime($elem->created_time)]='<div class="fb-wall-box fb-wall-likes">
+			<div class="text">
+			'.((isset($elem->created_time))?'<p class="fb-wall-date">'.format_date( strtotime($elem->created_time) , 'custom' , 'j F Y H:i') .'</p>':'').'
+			'.((isset($elem->picture))?'<img class="fb-wall-picture" src="'.$elem->picture.'" />':'').'
+			'.((isset($elem->name))?'<p class="fb-wall-name">'.$elem->name.'</p>':'').'
+			'.((isset($elem->category))?'<p class="fb-wall-category">'.$elem->category.'</p>':'').'
+			</div>
+			
+			</div>';
+		}
+	}
+
+
+	$html='';
+	foreach($out as $uid=>$elems){
+		ksort($elems);
+		$elems=array_reverse($elems);
+		$html.='<div class="fb-wall">'.implode('',$elems).'</div>';
+	}
+	return $html;
+}
+
+function _social_toolbar_update_fb_info($app_id,$app_secret,$access_token=null,$facebook_uid=null){
+
+	if( empty($app_id) || empty($app_secret) || empty($access_token) ) return false;
+
+	$social_toolbar_config = variable_get('social_toolbar_config',null);
+
+	foreach($social_toolbar_config as $kelem=>$elem){
+		if($elem['type']!='fb') continue;
+
+		foreach(explode("\n",$elem['markup']) as $kline=>$line){
+			$line=trim($line);
+			if($line=='') continue;
+			$line=explode('][',ltrim(rtrim($line,']'),'['));
+
+			$line_app_id=$line[0];
+			$line_app_secret=$line[1];
+
+			$line_facebook_uid=null;
+			$line_access_token=null;
+
+			if(isset($line[2]))
+				$line_access_token=$line[2];
+			if(isset($line[3]))
+				$line_facebook_uid=$line[3];
+			
+			if(is_array($access_token) && $access_token['old']!=$access_token['new']){
+				//aggiorno access_token e uid se passato
+				
+				if( $line_app_id==$app_id && $line_app_secret==$app_secret && $line_access_token==$access_token['old'] ){
+					$newmarkup=explode('\n',$elem['markup']);
+					if($facebook_uid!=null)
+						$newmarkup[$kline]='['.implode('][',array($app_id,$app_secret,$access_token['new'],$facebook_uid)).']';
+					else
+						$newmarkup[$kline]='['.implode('][',array($app_id,$app_secret,$access_token['new'])).']';
+
+					$social_toolbar_config[$kelem]['markup']=implode('\n',$newmarkup);
+					variable_set('social_toolbar_config',$social_toolbar_config);
+					return true;
+				}
+				
+			}else{
+				//trovo riga con access_token == access_token passato e aggiorno uid se passato
+				if(is_array($access_token)) $access_token=array_shift($access_token);
+				if( $line_app_id==$app_id && $line_app_secret==$app_secret && $line_access_token==$access_token ){
+
+					if($facebook_uid==null) return false;
+
+					$newmarkup=explode('\n',$elem['markup']);
+					$newmarkup[$kline]='['.implode('][',array($app_id,$app_secret,$access_token,$facebook_uid)).']';
+					$social_toolbar_config[$kelem]['markup']=implode('\n',$newmarkup);
+					variable_set('social_toolbar_config',$social_toolbar_config);
+					return true;
+				}
+			}
+		}
+
+		foreach(explode("\n",$elem['markup']) as $line){
+			$line=trim($line);
+			if($line=='') continue;
+			$line=explode('][',ltrim(rtrim($line,']'),'['));
+
+			$line_app_id=$line[0];
+			$line_app_secret=$line[1];
+			
+			//se non trovata - inserisco nella prima pos disponibile
+			if( $line_app_id==$app_id && $line_app_secret==$app_secret && count($line)==2 ){
+				if(is_array($access_token) && isset($access_token['new'])) $access_token=$access_token['new'];
+				else if(is_array($access_token)) $access_token=array_shift($access_token);
+
+				$newmarkup=explode('\n',$elem['markup']);
+				if($facebook_uid!=null)
+					$newmarkup[$kline]='['.implode('][',array($app_id,$app_secret,$access_token,$facebook_uid)).']';
+				else
+					$newmarkup[$kline]='['.implode('][',array($app_id,$app_secret,$access_token)).']';
+				
+				$social_toolbar_config[$kelem]['markup']=implode('\n',$newmarkup);
+				variable_set('social_toolbar_config',$social_toolbar_config);
+				return true;
+			}
+		}
+	}
+	return false;
+}
+
+function _social_toolbar_twitter_slide($content){
+
+	drupal_add_css(drupal_get_path('module','social_toolbar').'/css/social_toolbar_twitter.css');
+
+	$out='';
+	foreach(explode("\n",$content) as $line){
+		$line=trim($line);
+		if(empty($line)) continue;
+		if(stripos($line,'@')===0){
+			$screen_name=substr($line,1);
+			$json=drupal_http_request('http://api.twitter.com/1/statuses/user_timeline.json?screen_name=@'.$screen_name);
+		}else{
+			$query=urlencode($line);
+			$json=drupal_http_request('http://search.twitter.com/search.json?q='.$query.'&rpp=5&include_entities=true&with_twitter_user_id=true&result_type=mixed');
+		}
+
+		$tweets=drupal_json_decode($json->data);
+		if(isset($tweets['results']))$tweets=$tweets['results'];
+		$out.='<div class="tweet_list">'; 
+		foreach ($tweets as $tweet) {
+			if(!isset($tweet['from_user']) && isset($tweet['user']['screen_name'])) $tweet['from_user']=$tweet['user']['screen_name'];
+			if(!isset($tweet['from_user_name']) && isset($tweet['user']['name'])) $tweet['from_user_name']=$tweet['user']['name'];
+			if(!isset($tweet['profile_image_url']) && isset($tweet['user']['profile_image_url'])) $tweet['profile_image_url']=$tweet['user']['profile_image_url'];
+			
+			$out.='<div class="tweet">
+					<div class="tweet_avatar"><img src="'.$tweet['profile_image_url'].'"></div>
+					<h6><span class="name">'.$tweet['from_user_name'].'</span> <span class="screen_name">@'.$tweet['from_user'].'</span></h6>
+					<a class="twitter_icon_link" href="https://twitter.com/@'.$tweet['from_user'].'">&nbsp;</a>
+					<div>'.$tweet['text'].'</div>
+				</div>';
+		}
+		$out.='</div>'; 
+	}
+	return $out;
+}
+function _social_toolbar_youtube_slide($content){
+	drupal_add_js(drupal_get_path('module','social_toolbar').'/js/swfobject.js');
+	$w=(variable_get('social_toolbar_open_panel_w',425)-20);
+	$h=(variable_get('social_toolbar_open_panel_h',356)-20);
+
+	$ratio=16/9;
+	
+	/*w:h=16/9
+	$w=$h*$ratio;
+	$h=$w*(1/$ratio);*/
+	
+	$position=variable_get('social_toolbar_position',POSITION_RIGHT);
+	switch($position){
+		case POSITION_TOP:
+			$w=$h*$ratio;
+			break;
+		case POSITION_LEFT:
+			$h=$w*(1/$ratio);
+			break;
+		case POSITION_BOTTOM:
+			$w=$h*$ratio;
+			break;
+		case POSITION_RIGHT:
+			$h=$w*(1/$ratio);
+			break;
+	}
+	$out='';
+	$index=0;$maxelems=3;
+	foreach(explode("\n",$content) as $line){
+		if($index>=$maxelems) continue;
+
+		$line=trim($line);
+		$VIDEO_ID='';
+		if(!preg_match('/^https?:\/\//i',$line)) $VIDEO_ID=$line;
+		else{
+			$parsed=parse_url($line);
+			$query=explode('&',$parsed['query']);
+			if(stripos($parsed['path'],'/user/')===0){
+				$channel=drupal_http_request('http://gdata.youtube.com/feeds/api/users/' . substr($parsed['path'],strlen('/user/')) . '/uploads?alt=jsonc&v=2');
+				$channel=json_decode($channel->data);
+				foreach($channel->data->items as $item){
+					$VIDEO_ID[]=$item->id;
+				}
+			}else{
+				foreach($query as $q){
+					$q=explode('=',$q,2);
+					if($q[0]=='v'){
+						$VIDEO_ID=$q[1];
+						break;
+					}
+				}
+			}
+		}
+		if(!is_array($VIDEO_ID)) $VIDEO_ID=array($VIDEO_ID);
+		foreach($VIDEO_ID as $vid){
+			if($index>=$maxelems) continue;
+
+			$out.='<div id="ytapiplayer_'.++$index.'">You need Flash player 8+ and JavaScript enabled to view this video.</div>';
+			drupal_add_js('(function($){
+				swfobject.embedSWF("http://www.youtube.com/v/'.$vid.'?enablejsapi=1&playerapiid=ytapiplayer_'.$index.'&version=3",
+				"ytapiplayer_'.$index.'", "'.$w.'", "'.$h.'", "8", null, null, { allowScriptAccess: "always" }, { id: "myytplayer_'.$index.'" });
+			})(jQuery);','inline');
+		}
+	}
+	return $out;
+}
+function _social_toolbar_slideshare_slide($content){
+
+}
