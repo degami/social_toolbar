@@ -5,6 +5,11 @@ define('POSITION_LEFT',1);
 define('POSITION_BOTTOM',2);
 define('POSITION_RIGHT',3);
 
+
+define('ALIGN_TOP',0);
+define('ALIGN_CENTER',1);
+define('ALIGN_BOTTOM',2);
+
 function social_toolbar_menu(){
 	$items=array();
 	
@@ -72,6 +77,7 @@ function social_toolbar_form_admin($form,&$form_state){
 			'twitter'=>t('Twitter'),
 			'youtube'=>t('YouTube'),
 			'slideshare'=>t('Slideshare'),
+			'php'=>t('PHP'),
 		);
 	
 	$form['social_toolbar_numelems']=array('#type'=>'hidden','#value'=>count($social_toolbar_config));
@@ -148,6 +154,18 @@ function social_toolbar_form_admin($form,&$form_state){
 		),
 		'#default_value'=>variable_get('social_toolbar_position',POSITION_RIGHT),
 	);
+
+	$form['social_toolbar_align']=array(
+		'#type'=>'select',
+		'#title'=>t('Social Toolbar Alignment'),
+		'#options'=>array(
+			ALIGN_TOP=>t('Top / Left'),
+			ALIGN_CENTER=>t('Center'),
+			ALIGN_BOTTOM=>t('Bottom / Right'),
+		),
+		'#default_value'=>variable_get('social_toolbar_align',ALIGN_CENTER),
+	);
+
 	$form['social_toolbar_open_panel_w']=array(
 		'#type'=>'textfield',
 		'#title'=>t('Social Toolbar Open Panel Width'),
@@ -158,6 +176,33 @@ function social_toolbar_form_admin($form,&$form_state){
 		'#title'=>t('Social Toolbar Open Panel Height'),
 		'#default_value'=>variable_get('social_toolbar_open_panel_h',498),
 	);
+	$form['social_toolbar_icon_w']=array(
+		'#type'=>'textfield',
+		'#title'=>t('Social Toolbar Icon Width'),
+		'#default_value'=>variable_get('social_toolbar_icon_w',40),
+	);
+	$form['social_toolbar_icon_h']=array(
+		'#type'=>'textfield',
+		'#title'=>t('Social Toolbar Icon Height'),
+		'#default_value'=>variable_get('social_toolbar_icon_h',60),
+	);
+	$form['social_toolbar_borderwidth']=array(
+		'#type'=>'textfield',
+		'#title'=>t('Social Toolbar Border width'),
+		'#default_value'=>variable_get('social_toolbar_borderwidth',1),
+	);
+	$form['social_toolbar_add_css_inline']=array(
+		'#type'=>'textarea',
+		'#title'=>t('Social Toolbar Additional CSS styles'),
+		'#default_value'=>variable_get('social_toolbar_add_css_inline',''),
+	);
+
+	$form['social_toolbar_enabled_on_admin']=array(
+		'#type'=>'checkbox',
+		'#title'=>t('Enable Social Toolbar On Administration pages'),
+		'#default_value'=>variable_get('social_toolbar_enabled_on_admin', false),
+	);
+
 	$form['#validate'][]='social_toolbar_form_admin_validate';
 	
 	return system_settings_form($form);
@@ -226,7 +271,10 @@ function social_toolbar_form_admin_validate($form,&$form_state){
 }
 
 function social_toolbar_preprocess_html(&$variables){
-	if(arg(0)=='admin') return;
+	global $theme_key;
+	$admintheme=variable_get('admin_theme','');
+	if(trim(strtolower($theme_key)) == trim(strtolower($admintheme))) return;
+
 	if(variable_get('social_toolbar_enabled', false)!=true) return;
 	$out=_social_toolbar_get_markup();
 
@@ -247,72 +295,117 @@ function social_toolbar_preprocess_html(&$variables){
 		}
 	}
 
-	$variables['page']['page_top']['social_toolbar'] = $out;
-/*	
-.social_toolbar.position_bottom .icon,
-.social_toolbar.position_top .icon{
-	height: 40px;
-	width: 60px;
-}
-.social_toolbar.position_left .icon,
-.social_toolbar.position_right .icon{
-	height: 60px;
-	width: 40px;
-}
+	if( trim( variable_get('social_toolbar_add_css_inline','') ) != '' ){
+		drupal_add_css( variable_get('social_toolbar_add_css_inline','') , 'inline' );
+	}
 
-	
-.social_toolbar.position_bottom .toolbar_item_open,
-.social_toolbar.position_top .toolbar_item_open{
-	width: 542px;
-	height: 310px;	
-}
-.social_toolbar.position_right .toolbar_item_open,
-.social_toolbar.position_left .toolbar_item_open{
-	width: 354px;
-	height: 498px;
-}
-variable_get('social_toolbar_openpanel_w',500)
-variable_get('social_toolbar_openpanel_h',300)
-*/
+	$variables['page']['page_top']['social_toolbar'] = $out;
+	/*	
+	.social_toolbar.position_bottom .icon,
+	.social_toolbar.position_top .icon{
+		height: 40px;
+		width: 60px;
+	}
+	.social_toolbar.position_left .icon,
+	.social_toolbar.position_right .icon{
+		height: 60px;
+		width: 40px;
+	}
+
+		
+	.social_toolbar.position_bottom .toolbar_item_open,
+	.social_toolbar.position_top .toolbar_item_open{
+		width: 542px;
+		height: 310px;	
+	}
+	.social_toolbar.position_right .toolbar_item_open,
+	.social_toolbar.position_left .toolbar_item_open{
+		width: 354px;
+		height: 498px;
+	}
+	variable_get('social_toolbar_openpanel_w',500)
+	variable_get('social_toolbar_openpanel_h',300)
+	*/
 	$position=variable_get('social_toolbar_position',POSITION_RIGHT);
+	$alignment=variable_get('social_toolbar_align',ALIGN_CENTER);
 	$openpanel_w=0;
 	$openpanel_h=0;
+	$icon_w=0;
+	$icon_h=0;
+	$borderwidth = variable_get('social_toolbar_borderwidth',1);
+	$position_class="";
 	switch($position){
 		case POSITION_TOP:
-			$closedpanel_h=42;
-			$closedpanel_w=64;
+			$position_class="position_top";
+			$icon_h=variable_get('social_toolbar_icon_w',40);
+			$icon_w=variable_get('social_toolbar_icon_h',60);
+
+			$closedpanel_h = $icon_h + (2*$borderwidth); //42;
+			$closedpanel_w = $icon_w + (4*$borderwidth); //64;
 			$openpanel_h=variable_get('social_toolbar_open_panel_h',354);
 			$openpanel_w=variable_get('social_toolbar_open_panel_w',498);
+
+			$adjust_what = 'bottom'; $adjustment= $icon_h;
 			break;
 		case POSITION_LEFT:
-			$closedpanel_h=62;
-			$closedpanel_w=44;
+			$position_class="position_left";
+			$icon_w=variable_get('social_toolbar_icon_w',40);
+			$icon_h=variable_get('social_toolbar_icon_h',60);
+
+			$closedpanel_h = $icon_h + (2*$borderwidth); //62;
+			$closedpanel_w = $icon_w + (4*$borderwidth); //44;
 			$openpanel_h=variable_get('social_toolbar_open_panel_h',498);
 			$openpanel_w=variable_get('social_toolbar_open_panel_w',354);
+
+			$adjust_what = 'right'; $adjustment= $icon_w;
 			break;
 		case POSITION_BOTTOM:
-			$closedpanel_h=42;
-			$closedpanel_w=64;
+			$position_class="position_bottom";
+			$icon_h=variable_get('social_toolbar_icon_w',40);
+			$icon_w=variable_get('social_toolbar_icon_h',60);
+
+			$closedpanel_h = $icon_h + (2*$borderwidth); //42;
+			$closedpanel_w = $icon_w + (4*$borderwidth); //64;
 			$openpanel_h=variable_get('social_toolbar_open_panel_h',354);
 			$openpanel_w=variable_get('social_toolbar_open_panel_w',498);
+
+			$adjust_what = 'top'; $adjustment= $icon_h;
 			break;
 		case POSITION_RIGHT:
-			$closedpanel_h=62;
-			$closedpanel_w=44;
+			$position_class="position_right";
+			$icon_w=variable_get('social_toolbar_icon_w',40);
+			$icon_h=variable_get('social_toolbar_icon_h',60);
+
+			$closedpanel_h = $icon_h + (2*$borderwidth); //62;
+			$closedpanel_w = $icon_w + (4*$borderwidth); //44;
 			$openpanel_h=variable_get('social_toolbar_open_panel_h',498);
 			$openpanel_w=variable_get('social_toolbar_open_panel_w',354);
+
+			$adjust_what = 'left'; $adjustment= $icon_w;
 			break;
 	}
 
+	drupal_add_css('
+		.social_toolbar.'.$position_class.' .icon{height: '.$icon_h.'px;width: '.$icon_w.'px;}
+		.social_toolbar.'.$position_class.' .icon img{margin-top: -'.round($icon_h/2).'px;margin-left: -'.round($icon_w/2).'px;}
+		.social_toolbar .icon,
+		.social_toolbar.'.$position_class.' .panel{'.$adjust_what.':'.$adjustment.'px;}
+		.social_toolbar .panel{border-width:'.$borderwidth.'px;}
+		.social_toolbar.'.$position_class.' .toolbar_item{height: '.$closedpanel_h.'px;width: '.$closedpanel_w.'px;}
+	', 'inline');
+
 	drupal_add_js(
 		array('social_toolbar'=>array(
-			'openpanel_w'=>$openpanel_w,
-			'openpanel_h'=>$openpanel_h,
-			'closedpanel_w'=>$closedpanel_w,
-			'closedpanel_h'=>$closedpanel_h,
-			'position'=>$position,
-			)
-		),'setting');
+			'icon_w'		=>	$icon_w,
+			'icon_h'		=>	$icon_h,			
+			'openpanel_w'	=>	$openpanel_w,
+			'openpanel_h'	=>	$openpanel_h,
+			'closedpanel_w'	=>	$closedpanel_w,
+			'closedpanel_h'	=>	$closedpanel_h,
+			'position'		=>	$position,
+			'alignment'		=>	$alignment,
+		)),'setting'
+	);
 }
 
 /* Make a complete deep copy of an array replacing
@@ -357,8 +450,15 @@ function _social_toolbar_get_markup(){
 		POSITION_LEFT=>'position_left',
 	);
 	
+	$alignment=variable_get('social_toolbar_align',ALIGN_CENTER);
+	$alignment_classes=array(
+		ALIGN_TOP=>'align_top_left',
+		ALIGN_CENTER=>'',
+		ALIGN_BOTTOM=>'align_bottom_right',
+	);
+
 	$numelems=0;
-	$out['#markup'].='<div class="social_toolbar '.$position_classes[$position].'">';
+	$out['#markup'].='<div class="social_toolbar '.$position_classes[$position].' '.$alignment_classes[$alignment].'">';
 	foreach($social_toolbar_config as $elem){
 		$out['#markup'].='<div class="toolbar_item '.$elem['class'].'">';
 		$out['#markup'].='<div class="icon">';
@@ -385,23 +485,44 @@ function _social_toolbar_get_markup(){
 			case 'slideshare':
 				$out['#markup'].=_social_toolbar_slideshare_slide($elem['markup']);$numelems++;
 			break;
+			case 'php':
+				ob_start();
+				eval($elem['markup']);
+				$content = ob_get_contents();
+				ob_end_clean();
+				$out['#markup'].=$content;$numelems++;
+			break;			
 		}
 		$out['#markup'].='</div></div>';
 	}
 	
 	if($numelems>0){
 		$icon_size=64;
-		$icon_margin=10;
-		$widget_size=$numelems*($icon_size+$icon_margin);
-		$adjust_margin=round($widget_size/2);
 		switch($position){
 			case POSITION_TOP:
 			case POSITION_BOTTOM:
-			$out['#css'][]=array('file'=>'.social_toolbar{width: '.$widget_size.'px; margin-left: -'.$adjust_margin.'px;}','type'=>'inline');
+				$icon_size=variable_get('social_toolbar_icon_w',40) + 4;
 			break;
 			case POSITION_LEFT:
 			case POSITION_RIGHT:
-			$out['#css'][]=array('file'=>'.social_toolbar{height: '.$widget_size.'px; margin-top: -'.$adjust_margin.'px;}','type'=>'inline');
+				$icon_size=variable_get('social_toolbar_icon_h',60) + 4;
+			break;
+		}
+
+		$icon_margin=10;
+		$widget_size=$numelems*($icon_size+$icon_margin);
+		$adjust_margin=round($widget_size/2);
+
+		switch($position){
+			case POSITION_TOP:
+			case POSITION_BOTTOM:
+				if($alignment == ALIGN_CENTER)
+					$out['#css'][]=array('file'=>'.social_toolbar{width: '.$widget_size.'px; margin-left: -'.$adjust_margin.'px;}','type'=>'inline');
+			break;
+			case POSITION_LEFT:
+			case POSITION_RIGHT:
+				if($alignment == ALIGN_CENTER)
+					$out['#css'][]=array('file'=>'.social_toolbar{height: '.$widget_size.'px; margin-top: -'.$adjust_margin.'px;}','type'=>'inline');
 			break;
 		}
 	}
@@ -424,12 +545,12 @@ function _social_toolbar_get_logo_image($file){
 	$image_arr = array(
 		'style_name' => 'logo_toolbar',
 		'path' => $file->uri,
-		'width' => '',
-		'height' => '',
+		'width' => $file->image_dimensions['width'],
+		'height' => $file->image_dimensions['height'],
 		'alt' => '',
 		'title' => '',
 	);
-	return theme('image_style',$image_arr);
+	return '<a href="#">'.theme('image_style',$image_arr).'</a>';
 }
 
 function _social_toolbar_create_image_style() {
